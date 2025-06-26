@@ -1,0 +1,646 @@
+1. **BEV Query 추출**  
+   - 기존 Space3DNet 또는 ViewFormerHead에서 BEV Query (Bₜ) 생성
+
+2. **Object Mask 예측 모듈 (ObjectMaskNet) 구현**  
+   - BEV 특징맵에서 객체 관련 정보를 추출하여 객체 마스크 Mₜ를 예측  
+   - CNN 계층 등을 사용하여 Mₜ를 [B, 1, H, W] 형태로 출력 (Sigmoid 적용)
+       ->  CNN으로 객체 검출. 
+       
+       
+3. **Residual 결합 연산**   
+   - BEV Query Bₜ와 예측된 Object Mask Mₜ를 Residual 방식으로 결합  
+   - 공식: Enhanced BEV = Bₜ + α × Mₜ  
+   - α는 학습 가능한 하이퍼파라미터
+      
+   
+4. **GT 객체 마스크 생성 함수 구현**  
+   - 기존 Occupancy GT (예: [B, num_classes, H, W])에서 객체 영역(예: 1번 채널 이후)을 이진화하여 GT 마스크 생성
+
+
+5. **마스크 손실 (Mask Loss) 계산**  				
+   - 예측 마스크와 GT 마스크 사이의 Binary Cross-Entropy Loss 또는 Dice Loss 계산  
+   - 전체 Loss에 추가되어 최종 최적화에 반영
+
+
+6. **Forward 통합**  
+   - BEV Query 생성 후, 위 Object Mask 예측 모듈을 호출하여 예측 마스크와 손실을 계산하고, Residual 결합을 수행  
+   - 수정된 BEV Query가 Streaming Temporal Attention 모듈로 전달되어 최종 Occupancy 예측에 사용
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#개인 컴 기준 (TitanX*1 -> 3090*1)
+#Install
+
+conda deactivate
+conda remove -n view --all -y
+conda env list
+conda activate view
+
+#conda 환경 생성
+conda create -n view python=3.8 -y
+conda activate view
+
+#CUDA == 11.8 (>=11.2)
+#PyTorch == 2.0.1 (>=1.10.0)
+#mmdet3d == 1.0.0rc6
+
+#CUDA local 설치
+#wget developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda_11.8.0_520.61.05_linux.run
+sudo sh cuda_11.8.0_520.61.05_linux.run
+#출처: developer.nvidia.com/cuda-11-8-0-download-archive?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=22.04&target_type=runfile_local <- 누르면 설치됌
+
+#CUDA conda 설치 (<- 건너뛰기 가능)
+conda install -c "nvidia/label/cuda-11.8.0" cuda-toolkit -y
+#출처: https://anaconda.org/nvidia/cuda
+#참고: https://github.com/ContinuumIO/anaconda-issues/issues/13398
+
+#PyTorch == 2.0.1 (>=1.10.0) 설치
+conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.8 -c pytorch -c nvidia -y
+#출처: https://pytorch.org/get-started/previous-versions/
+
+#설치 확인 (conda list cuda-toolkit -f 는 건너뛰면 안잡힘)
+conda list cuda-toolkit -f 
+python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+
+#ViewFormer
+git clone https://github.com/ViewFormerOcc/ViewFormer-Occ.git
+
+#mmcv
+pip install mmcv-full==1.6.0
+
+#mmdet, mmseg
+pip install mmdet==2.28.2
+pip install mmsegmentation==0.30.0
+
+#mmdet3d
+pip install mmdet3d==1.0.0rc6
+
+#Build
+cd ./ViewFormer-Occ
+git clone https://github.com/open-mmlab/mmdetection3d.git
+cd mmdetection3d
+git checkout v1.0.0rc6 
+pip install -e .
+
+#DCNv3: CUDA 연산자 컴파일
+cd ..
+cd ./ops_dcnv3
+sh ./make.sh
+
+
+#Data Preparation
+
+#1. Dataset
+#symbolic:
+mkdir data && cd data
+
+3090 개인컴:
+ln -s /home/hyun/hdd/storage1/nuscenes /home/hyun/hdd/storage1/code/vieeew/ViewFormer-Occ/data
+
+AIS2 서버컴 / 공용 dataset: (진행) 
+ln -s /mnt/dataset_storage/nuscenes /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/data
+
+AIS2 서버컴 / 상민이형 dataset:
+ln -s /home/sangmin/dataset_storage/nuscenes /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/data
+
+# -> 데이터 이상함. mnt 데이터 셋으로 변경
+
+
+#1
+mini
+이미지: gdown https://drive.google.com/uc?id=1sq53oTHhvRZr9IDNSfeUP-C_WsOYZ02K
+gts: gdown https://drive.google.com/uc?id=1-XIJRS_Uy0tC6Th6KlMIlrzw8JH939cp
+json: gdown https://drive.google.com/uc?id=1viH_LNCJtCBLZ6EU8a117oWlnnn1s8AY
+
+trainval
+이미지: gdown https://drive.google.com/uc?id=1B-UFADsyCpxsZP3aS127afpn4zDkNpDO
+gts: gdown https://drive.google.com/uc?id=1kiXVNSEi3UrNERPMz_CfiJXKkgts_5dY
+json: gdown https://drive.google.com/uc?id=1Wj2saxyvfsBuIbG0rshcm3tFPB6-tuKa
+
+test
+이미지: gdown https://drive.google.com/uc?id=14M6egaqegZH3Isolx4Qpql-EojII0dOF
+json: gdown https://drive.google.com/uc?id=1RrJcY3vsZTWIlAocTb0ogGmPrrLF-V3j
+
+
+
+gdown https://drive.google.com/uc?id=1sq53oTHhvRZr9IDNSfeUP-C_WsOYZ02K
+gdown https://drive.google.com/uc?id=1-XIJRS_Uy0tC6Th6KlMIlrzw8JH939cp
+gdown https://drive.google.com/uc?id=1viH_LNCJtCBLZ6EU8a117oWlnnn1s8AY
+gdown https://drive.google.com/uc?id=1B-UFADsyCpxsZP3aS127afpn4zDkNpDO
+gdown https://drive.google.com/uc?id=1kiXVNSEi3UrNERPMz_CfiJXKkgts_5dY
+gdown https://drive.google.com/uc?id=1Wj2saxyvfsBuIbG0rshcm3tFPB6-tuKa
+gdown https://drive.google.com/uc?id=14M6egaqegZH3Isolx4Qpql-EojII0dOF
+gdown https://drive.google.com/uc?id=1RrJcY3vsZTWIlAocTb0ogGmPrrLF-V3j
+
+
+
+
+
+#2. FlowOcc3D (3D Occupancy Flow Dataset)
+cd nuscenes
+#occ_flow_sparse_ext.zip
+wget https://huggingface.co/viewformer/ViewFormer-Occ/resolve/main/occ_flow_sparse_ext.zip
+#-> 이름 변경 필요
+#압축 해제: unzip occ_flow_sparse_ext.zip
+#필요 없는거 삭제: rm -rf __MACOSX
+
+
+
+
+
+
+
+
+
+#3. Creating infos file (전 작업)
+
+"""""""""""""""""""""""""""""""""""""""""""""
+gdown (서버 구글 드라이브 다운로드 가이드) pip install gdown
+https://panggu15.github.io/data_collect/gdown/
+예시:
+다운로드파일링크:
+https://drive.google.com/file/d/1m2Zji96bKyrRFw9j0pkSs4dudREfhur4/view?usp=sharing
+d/~/view
+1m2Zji96bKyrRFw9j0pkSs4dudREfhur4
++
+gdown https://drive.google.com/uc?id=
+최종명령어:
+gdown https://drive.google.com/uc?id=1m2Zji96bKyrRFw9j0pkSs4dudREfhur4
+"""""""""""""""""""""""""""""""""""""""""""""
+
+
+
+# https://drive.google.com/drive/folders/1JObO75iTA2Ge5fa8D3BWC8R7yIG8VhrP
+# 에서 https://drive.google.com/drive/folders/1JObO75iTA2Ge5fa8D3BWC8R7yIG8VhrP
+
+#gts.tar.gz
+#기존에 있으면 있는 걸로 사용
+gdown https://drive.google.com/uc?id=1kiXVNSEi3UrNERPMz_CfiJXKkgts_5dY
+tar -xvzf gts.tar.gz
+
+
+#annotations.json
+mkdir occ3d-nus
+cd occ3d-nus
+gdown https://drive.google.com/uc?id=1Wj2saxyvfsBuIbG0rshcm3tFPB6-tuKa
+#occ3d-nus/  -> annotations.json
+
+
+
+
+
+
+
+
+
+
+
+#3. Creating infos file
+cd /home/hyun/hdd/storage1/code/vieeew/ViewFormer-Occ
+python tools/create_occ_data.py occ --root-path ./data/nuscenes --out-dir ./data/nuscenes --extra-tag occ_infos_temporal --version v1.0-trainval --canbus ./data/nuscenes --occ-path ./data/nuscenes/occ3d-nus
+#-> 에러:
+nuscenes_occ_converter_LidarBoxRefactor 파일 없음.
+nuscenes_occ_converter.py만 존재.
+#수동 다운로드 진행
+cd data/nuscenes -> 여기다 하면 권한 에러 발생. 다른곳에서 다운 후 옮.
+#occ_infos_temporal_train.pkl
+https://drive.google.com/file/d/18VBZ2MbS3a4ev56L3ShRZfKAoh2FxHcl/view?usp=sharing
+gdown https://drive.google.com/uc?id=18VBZ2MbS3a4ev56L3ShRZfKAoh2FxHcl
+
+#occ_infos_temporal_val.pkl
+# https://drive.google.com/file/d/14j0Pr7LHDIvqBBOKXc-8DdJu-r7dm01o/view?usp=sharing
+gdown https://drive.google.com/uc?id=14j0Pr7LHDIvqBBOKXc-8DdJu-r7dm01o
+
+cp /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/data/occ_infos_temporal_val.pkl /mnt/dataset_storage/nuscenes/
+직접 넣음.
+
+#4. Pretrained Weights
+cd /path/to/ViewFormer-Occ
+mkdir ckpts && cd ckpts
+# r50_256x705_depth_pretrain.pth
+# https://github.com/ViewFormerOcc/ViewFormer-Occ/tree/main?tab=readme-ov-file
+wget https://github.com/zhiqi-li/storage/releases/download/v1.0/r50_256x705_depth_pretrain.pth
+
+
+
+
+
+#5. Auxiliary Depth Supervision (Training Only)
+
+#1 nuscenes_12hz_infos_val.pkl
+https://drive.google.com/file/d/1ForFJxe1OU_1fVqolMvtQakSlWXxs_lN/view?usp=sharing
+gdown https://drive.google.com/uc?id=1ForFJxe1OU_1fVqolMvtQakSlWXxs_lN
+
+#2 nuscenes_12hz_infos_train.pkl
+https://drive.google.com/file/d/1ACx_3Fzp5gUwvAHYuxshyAjCV_u7vQ-c/view?usp=sharing
+gdown https://drive.google.com/uc?id=1ACx_3Fzp5gUwvAHYuxshyAjCV_u7vQ-c
+
+
+cd /home/hyun/hdd/storage1/code/vieeew/ViewFormer-Occ/data/nuscenes
+#3 depth_pano_seg_gt.zip
+# https://drive.google.com/file/d/1AVpSpXy-RQMwCfozvvu5DbmnsO7Znqu0/view?usp=sharing
+gdown https://drive.google.com/uc?id=1AVpSpXy-RQMwCfozvvu5DbmnsO7Znqu0
+
+
+# 1. 압축 해제 (기존 압축 해제 폴더 이름을 그대로 사용)
+unzip -q -d "./depth_pano_seg_gt" -o depth_pano_seg_gt.zip
+# 2. 압축 해제 후 파일 무결성 확인
+cd ./depth_pano_seg_gt
+find . -type f -exec md5sum {} \; > extracted_checksums
+#압축 해제: unzip depth_pano_seg_gt.zip
+#필요 없는거 삭제: rm -rf depth_pano_seg_gt.zip
+
+후 아래 스크립트 실행:
+python scripts/gen_depth_label_gt.py
+
+
+
+데이터셋 명령어
+ln -sfn /mnt/dataset_storage/nuscenes /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/data/nuscenes
+
+심볼릭 링크 확인
+readlink -f /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/data/nuscenes
+
+
+--------------------------------------
+
+
+2번 서버 전용 명령어: (Object_Mask-Seg-Multi_GPU-DDPDEBUG)
+
+디버깅:
+find . -name "__pycache__" -exec rm -rf {} +
+find . -name "*.pyc" -exec rm -f {} +
+export TORCH_DISTRIBUTED_DEBUG=DETAIL
+CUDA_LAUNCH_BLOCKING=1 ./tools/torchrun_occ_train.sh ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py 2 --work-dir ./work_dirs/Object_Mask-Seg-Multi_GPU-DDPDEBUG
+
+->
+1. 캐시 파일 정리
+2. 디버깅 환경 변수 설정
+3. DDP 디버깅용 런처
+CUDA_LAUNCH_BLOCKING=1
+→ CUDA 비동기 연산을 동기화해서 오류 발생 시 정확한 줄을 추적 가능
+
+
+Object_Mask-Seg-Multi_GPU-DDPDEBUG
+
+export PYTHONPATH=$(pwd):$PYTHONPATH
+
+#TRAIN
+./tools/torchrun_occ_train.sh ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py 2 --work-dir ./work_dirs/Object_Mask-Seg-Multi_GPU-DDPDEBUG
+nohup ./tools/torchrun_occ_train.sh ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py 2 --work-dir ./work_dirs/Object_Mask-Seg-Multi_GPU-DDPDEBUG > Object_Mask-Seg-Multi_GPU-DDPDEBUG_train.log 2>&1 &
+
+jobs
+disown -h %1
+
+모니터링:
+(학습 중에 다른 터미널에 입력)
+rm -rf ~/.tensorboard-info
+tensorboard --logdir ./work_dirs/Object_Mask-Seg-Multi_GPU-DDPDEBUG/tf_logs --port 6006 --reload_interval 5
+
+
+
+논문 반영:
+ViewFormer-Occ/work_dirs/Object_Mask-Seg-Multi_GPU-DDPDEBUG
+
+find_unused_parameters = False
+with_cp = True
+lr = 7.5e-5
+
+메모리: 16.2GB
+파라미터: 181,216,005
+
+632925에 체크포인트 따로 빼두기
+
+
+
+export PYTHONPATH=$(pwd):$PYTHONPATH
+
+
+#TEST
+nohup ./tools/torchrun_occ_test.sh ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/work_dirs/Object_Mask-Seg-Multi_GPU-DDPDEBUG/latest.pth 2 --eval occ > Object_Mask-Seg-Multi_GPU-DDPDEBUG_test.log 2>&1 &
+
+#FPS
+nohup python tools/analysis_tools/benchmark.py ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/work_dirs/Object_Mask-Seg-Multi_GPU-DDPDEBUG/latest.pth --samples 2000 --log-interval 50 --fuse-conv-bn > Object_Mask-Seg-Multi_GPU-DDPDEBUG_FPS_eval.log 2>&1 &
+
+#FLOPs
+nohup python tools/analysis_tools/get_flops.py ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/work_dirs/Object_Mask-Seg-Multi_GPU-DDPDEBUG/latest.pth --shape 6 3 224 224 --modality image > Object_Mask-Seg-Multi_GPU-DDPDEBUG_FLOPsNParams_eval.log 2>&1 &
+
+
+
+시각화: (checkpiont 빼두기)
+   1%      50%       100%
+시작 /   632,925 / 학습 끝
+
+
+cd ViewFormer-Occ/
+
+ps aux | grep torchrun_occ_train
+/bin/python3 /home/hyun/.vscode-server/extensions/ms-python.python-2025.0.0-linux-x64/python_files/printEnvVariablesToFile.py /home/hyun/.vscode-server/extensions/ms-python.python-2025.0.0-linux-x64/python_files/deactivate/bash/envVars.txt
+gpu
+history
+
+
+# 메모리 집계
+import torch
+print(torch.cuda.memory_summary())  # GPU 메모리 사용량 요약
+
+
+# 모델 그래프 이미지 저장
+# Train 코드 한줄
+# 아래는 참고 
+import torchvision
+model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)
+model_graph.visual_graph
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 25.06.02 진우형:
+논문 반영:
+ViewFormer-Occ/work_dirs/Object_Mask-Seg-Multi_GPU-DDPDEBUG
+-> TEST까지 완료. 아래 코드 복구 후 FPS, Flops 도출 필요.
+-> 만약 Detach 결과가 더 좋으면 이걸로 진행.
+
+
+ViewFormer-Occ/work_dirs/Object_Mask-Seg-Multi_Detach
+
+
+ViewFormer-Occ/projects/mmdet3d_plugin/models/utils/object_mask.py:
+```
+    def forward(self, bev_feat):
+
+        bev_feat = bev_feat.detach()
+        with torch.set_grad_enabled(self.training):
+            transformer_feats = self.object_mask_net.transformer.forward_features(bev_feat)
+            seg_logits = self.object_mask_net.decode_head(transformer_feats, return_logits=True)
+
+        return seg_logits
+```
+->
+```
+    def forward(self, bev_feat):
+
+        transformer_feats = self.object_mask_net.transformer.forward_features(bev_feat)
+        seg_logits = self.object_mask_net.decode_head(transformer_feats, return_logits=True)
+
+        return seg_logits
+```
+
+ViewFormer-Occ/projects/mmdet3d_plugin/models/dense_heads/viewformer_head.py:
+```
+seg_logits = self.object_mask_module(bev_feat.detach())
+```
+->
+
+```
+seg_logits = self.object_mask_module(bev_feat)
+```
++ === 객체 마스크 Loss 통합 === 주석 확인
+
+
+ViewFormer-Occ/projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py:
+```
+lr = 7.5e-5 -> 5e-5
+```
+
+ViewFormer-Occ/projects/mmdet3d_plugin/models/utils/object_mask_loss.py:
+```
+주석 확인.
+```
+
+
+
+메모리: 16.2GB
+파라미터: 181,216,005
+
+632925에 체크포인트 따로 빼두기
+
+
+#TRAIN
+./tools/torchrun_occ_train.sh ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py 2 --work-dir ./work_dirs/Object_Mask-Seg-Multi_Detach
+nohup ./tools/torchrun_occ_train.sh ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py 2 --work-dir ./work_dirs/Object_Mask-Seg-Multi_Detach > Object_Mask-Seg-Multi_Detach_train.log 2>&1 &
+
+jobs
+disown -h %1
+
+모니터링:
+(학습 중에 다른 터미널에 입력)
+rm -rf ~/.tensorboard-info
+tensorboard --logdir ./work_dirs/Object_Mask-Seg-Multi_Detach/tf_logs --port 6006 --reload_interval 5
+
+
+#TEST
+nohup ./tools/torchrun_occ_test.sh ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/work_dirs/Object_Mask-Seg-Multi_Detach/latest.pth 2 --eval occ > Object_Mask-Seg-Multi_Detach_test.log 2>&1 &
+
+#FPS
+nohup python tools/analysis_tools/benchmark.py ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/work_dirs/Object_Mask-Seg-Multi_Detach/latest.pth --samples 2000 --log-interval 50 --fuse-conv-bn > Object_Mask-Seg-Multi_Detach_FPS_eval.log 2>&1 &
+
+#FLOPs
+nohup python tools/analysis_tools/get_flops.py ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/work_dirs/Object_Mask-Seg-Multi_Detach/latest.pth --shape 6 3 224 224 --modality image > Object_Mask-Seg-Multi_Detach_FLOPsNParams_eval.log 2>&1 &
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##################### Train
+#권한 부여 안되어 있음. 
+chmod +x ./occ_train.sh
+
+#Single-GPU:
+#./occ_train.sh
+# 25.04.26 Seg_Object_Mask 실험 중: 
+   Object_Mask-Seg-Single_GPU
+
+
+#TRAIN
+nohup ./occ_train.sh > Object_Mask-Seg-Single_GPU.log 2>&1 &
+jobs
+disown -h %1
+
+pip install --upgrade protobuf==3.20.3
+tensorboard --logdir ./work_dirs/Object_Mask-Seg-Single_GPU/tf_logs --port 6006 --reload_interval 5
+
+
+
+tensorboard --logdir /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/work_dirs/Object_Mask-Seg-Multi_GPU-DDPDEBUG/tf_logs --port 6006 --reload_interval 5
+
+tensorboard --logdir ./work_dirs/Object_Mask-Seg-Single_GPU/tf_logs --port 6006 --reload_interval 5
+
+시각화: (checkpiont 빼두기)
+   1%      50%       100%
+시작 /   632,925 / 학습 끝
+
+
+#TEST
+nohup ./occ_test.sh > eval_Object_Mask-Seg-Single_GPU.log 2>&1 &
+
+#FPS
+nohup python tools/analysis_tools/benchmark.py ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py ./work_dirs/Object_Mask-Seg-Single_GPU/latest.pth --samples 2000 --log-interval 50 --fuse-conv-bn > Object_Mask-Seg-Single_GPU_FPS_eval.log 2>&1 &
+
+#FLOPs
+nohup python tools/analysis_tools/get_flops.py ./projects/configs/viewformer/viewformer_r50_704x256_seq_90e.py ./work_dirs/Object_Mask-Seg-Single_GPU/latest.pth --shape 6 3 224 224 --modality image > Object_Mask-Seg-Single_GPU_FLOPsNParams_eval.log 2>&1 &
+
+
+
+seg [125000/2531700] 학습 후 평가 결과:
+Starting Evaluation (Overridden method)...
+100%|██| 6019/6019 [00:45<00:00, 131.81it/s]
+2025-04-29 21:34:45,624 - mmdet - INFO - ===> per class IoU of 6019 samples:
+2025-04-29 21:34:45,953 - mmdet - INFO - ===> others - IoU = 4.69
+2025-04-29 21:34:45,953 - mmdet - INFO - ===> barrier - IoU = 25.97
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> bicycle - IoU = 10.22
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> bus - IoU = 34.11
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> car - IoU = 40.59
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> construction_vehicle - IoU = 8.11
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> motorcycle - IoU = 15.31
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> pedestrian - IoU = 14.21
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> traffic_cone - IoU = 10.03
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> trailer - IoU = 17.95
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> truck - IoU = 24.9
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> driveable_surface - IoU = 78.81
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> other_flat - IoU = 39.57
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> sidewalk - IoU = 45.04
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> terrain - IoU = 50.99
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> manmade - IoU = 31.15
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> vegetation - IoU = 28.22
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> free - IoU = 83.86
+
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> mIoU of 6019 samples: 28.23
+
+2025-04-29 21:34:45,954 - mmdet - INFO - ===> geo - IoU = 59.45
+2025-04-29 21:34:56,227 - mmdet - INFO - Now best checkpoint is saved as best_mIoU_iter_125001.pth.
+2025-04-29 21:34:56,228 - mmdet - INFO - Best mIoU is 0.3132 at 125001 iter.
+2025-04-29 21:34:56,228 - mmdet - INFO - Iter(val) [6019]       mIoU: 0.3132
+
+
+
+
+
+
+
+
+
+#################### killed
+
+ps aux | grep train
+
+모든 train.py 프로세스 종료:
+kill -9 $(ps aux | grep '[p]ython.*train.py' | awk '{print $2}')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1. github 업로드
+2. 데이터서버로 백업
+(2번서버 기준)
+rsync -aHAXvc --no-links --stats --itemize-changes --numeric-ids --partial --progress /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ /home/hyun/private/ProJect_ViewFormer/
+1. /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ 
+2. /home/hyun/private/ProJect_ViewFormer
+-> 1에서 2로 복사
+
+
+3. 데이터 서버에 있는걸 vscode로 가져옴
+rsync -aHAXvc --stats --itemize-changes --numeric-ids --partial --progress /home/hyun/private/ProJect_ViewFormer/ViewFormer-Occ /home/hyun/local_storage/code/seg_object_vieeew/
+
+
+##
+개인 데스크탑 기준.
+데스크탑에서 데이터서버로 복사 명령어:
+rsync -aHAXvc --stats --itemize-changes --numeric-ids --partial --progress /home/hyun/hdd/storage1/code/viewseg/ViewFormer-Occ /home/hyun/hdd/storage1/code/dataserver_homes/ProJect_ViewFormer/
+rsync -aHAXvc --stats --itemize-changes --numeric-ids --partial --progress --exclude="/data/nuscenes" /home/hyun/hdd/storage1/code/viewseg/ViewFormer-Occ /home/hyun/hdd/storage1/code/dataserver_homes/ProJect_ViewFormer/
+rsync -aHAXvc --no-links --stats --itemize-changes --numeric-ids --partial --progress /home/hyun/hdd/storage1/code/viewseg/ViewFormer-Occ /home/hyun/hdd/storage1/code/dataserver_homes/ProJect_ViewFormer/
+1. /home/hyun/hdd/storage1/code/viewseg/ViewFormer-Occ
+2. /home/hyun/hdd/storage1/code/dataserver_homes/ProJect_ViewFormer
+-> 1에서 2로 복사
+3번째 명령어는 심볼릭 무시
+취소:
+rm -rf /home/hyun/hdd/storage1/code/dataserver_homes/ProJect_ViewFormer/ViewFormer-Occ
+
+
+
+
+경로1:
+``` /home/hyun/local_storage/code/seg_object_vieeew/ViewFormer-Occ/work_dirs/Object_Mask-Seg-Multi_GPU-DDPDEBUG/Visualization_Seg_Paper ```
+경로2:
+``` /home/hyun/private/ProJect_ViewFormer/ ```
