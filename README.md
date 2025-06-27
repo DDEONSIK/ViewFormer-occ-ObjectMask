@@ -6,7 +6,7 @@
 
 
 - [2025/03/31]: First implementation completed.
-- [2025/07/00]: Paper submitted by: Institute of Control, Robotics and Systems (ICROS).
+- [2025/06/24]: Paper submitted by: Institute of Control, Robotics and Systems (ICROS).
 ![image](https://github.com/user-attachments/assets/c5eb037a-73fe-4271-b858-cd8a97213dbb)
 ![image](https://github.com/user-attachments/assets/8358f0ca-87c9-4717-8747-82dac56edc21)
 ![image](https://github.com/user-attachments/assets/9ae8a2df-7745-43fb-a0d0-43271617278a)
