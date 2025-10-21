@@ -1,6 +1,4 @@
 <div align="center">
-<h2>ViewFormer: Exploring Spatiotemporal Modeling for Multi-View 3D Occupancy Perception via View-Guided Transformers</h2>
-
 <h2>Object Mask Module for Enhancing Multi-view 3D Occupancy Perception Performance Based on ViewFormer</h2>
 </div>
 
@@ -27,6 +25,8 @@ autonomous driving, deep learning, 3D occupancy, viewformer, BEV representation,
 ![image](https://github.com/user-attachments/assets/8358f0ca-87c9-4717-8747-82dac56edc21)
 ![image](https://github.com/user-attachments/assets/9ae8a2df-7745-43fb-a0d0-43271617278a)
 
+---
+---
 
 <div align="center">
 <h2>ViewFormer: Exploring Spatiotemporal Modeling for Multi-View 3D Occupancy Perception via View-Guided Transformers</h2>
