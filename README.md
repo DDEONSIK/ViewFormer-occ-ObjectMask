@@ -6,7 +6,7 @@
 - [2025/04]: First implementation completed.
 - [2025/06]: Manuscript submitted.
 - [2025/08]: Manuscript revised.
-- [2025/10]: This work has been accepted for publication in the Institute of Control, Robotics and Systems (ICROS), 2025.
+- [2025/10]: This work has been published in the Journal of Institute of Control, Robotics and Systems (JICROS), vol. 31, no. 10, pp. 1160-1168, 2025. (Scopus, DOI: 10.5302/J.ICROS.2025.25.0168)
 
 ---
 
