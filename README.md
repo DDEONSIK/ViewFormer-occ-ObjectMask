@@ -27,7 +27,7 @@ This study examines enhancing object detection by integrating an object-masking 
 autonomous driving, deep learning, 3D occupancy, viewformer, BEV representation, object masking
 
 ---
-<img width="1003" height="239" alt="image" src="https://github.com/user-attachments/assets/594fa25f-49c7-4e24-bfe7-310d19ef7836" />
+<img width="1275" height="304" alt="image" src="https://github.com/user-attachments/assets/7917cf87-49ec-45b4-a169-2de6a88e70f7" />
 
 
 ### Table 1. Comparison of model performance.
