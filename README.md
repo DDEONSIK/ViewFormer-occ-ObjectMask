@@ -2,12 +2,10 @@
 <h2>Object Mask Module for Enhancing Multi-view 3D Occupancy Perception Performance Based on ViewFormer</h2>
 </div>
 
-
 - [2025/06]: Manuscript submitted (received on June 24, 2025).
 - [2025/07]: Manuscript revised (on July 25, 2025).
 - [2025/08]: Manuscript accepted (on August 20, 2025).
 - [2025/10]: This work has been published in the Institute of Control, Robotics and Systems (ICROS, SCOPUS)
-
 
 <p align="center">
     <a href='https://doi.org/10.5302/J.ICROS.2025.25.0168'><img src="https://img.shields.io/badge/Paper-PDF-blue?style=flat&#x26;logo=doi&#x26;logoColor=yello" alt="Paper PDF"></a>
@@ -21,11 +19,8 @@
 This study examines enhancing object detection by integrating an object-masking module into ViewFormer, a transformer-based model for 3D occupancy prediction from multi-view images. While ViewFormer effectively captures spatiotemporal information, it underperforms on small objects such as pedestrians and bicycles. To address this limitation, we designed a SegFormer-based object masking module that estimates object probabilities from BEV features and concatenates them as an additional feature channel. Experimental evaluations on the nuScenes dataset revealed an unexpected performance decline in overall metrics (mIoU, IoUgeo), particularly for small object detection. Subsequent analysis indicated weak mask activation and instability during initial training as key factors limiting the module’s effectiveness. These findings highlight the viability and constraints of object masking, underscoring the need for structural adjustments and improved training strategies to stabilize mask learning in future work.
 
 
-
 ## Keywords
-
 autonomous driving, deep learning, 3D occupancy, viewformer, BEV representation, object masking
-
 
 <img width="1275" height="304" alt="image" src="https://github.com/user-attachments/assets/7917cf87-49ec-45b4-a169-2de6a88e70f7" />
 
