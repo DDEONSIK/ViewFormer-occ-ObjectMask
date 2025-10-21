@@ -5,9 +5,9 @@
 </div>
 
 
-- [2025/03]: First implementation completed.
+- [2025/04]: First implementation completed.
 - [2025/06]: Manuscript submitted.
-- [2025/07]: Manuscript revised.
+- [2025/08]: Manuscript revised.
 - [2025/10]: This work has been accepted for publication in the Institute of Control, Robotics and Systems (ICROS), 2025.
 
 ---
