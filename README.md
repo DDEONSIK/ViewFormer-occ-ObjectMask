@@ -2,9 +2,9 @@
 <h2>Object Mask Module for Enhancing Multi-view 3D Occupancy Perception Performance Based on ViewFormer</h2>
 </div>
 
-- [2025/06]: Manuscript submitted (received on June 24, 2025).
-- [2025/07]: Manuscript revised (on July 25, 2025).
-- [2025/08]: Manuscript accepted (on August 20, 2025).
+- [2025/06]: Manuscript submitted.
+- [2025/07]: Manuscript revised.
+- [2025/08]: Manuscript accepted.
 - [2025/10]: This work has been published in the Institute of Control, Robotics and Systems (ICROS, SCOPUS)
 
 <p align="center">
