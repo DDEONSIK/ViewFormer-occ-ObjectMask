@@ -5,7 +5,7 @@
 - [2025/06]: Manuscript submitted.
 - [2025/07]: Manuscript revised.
 - [2025/08]: Manuscript accepted.
-- [2025/10]: This work has been published in the Institute of Control, Robotics and Systems (ICROS, SCOPUS)
+- [2025/10]: This work has been published in the Institute of Control, Robotics and Systems (ICROS, SCOPUS).
 
 <p align="center">
     <a href='https://doi.org/10.5302/J.ICROS.2025.25.0168'><img src="https://img.shields.io/badge/Paper-PDF-blue?style=flat&#x26;logo=doi&#x26;logoColor=yello" alt="Paper PDF"></a>
